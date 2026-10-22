@@ -54,6 +54,7 @@ aind-ibl-preprocess \
 | `--manifest PATH` | **(required)** Manifest CSV file (absolute, or relative to `data_root`) |
 | `--scratch-root PATH` | Scratch directory for temporary files (default: system temp) |
 | `--skip-ephys` | Skip electrophysiology extraction |
+| `--extra-metrics NAMES` | Comma-separated optional conversion metrics to compute during ephys extraction (currently `raw_activity`). None by default |
 | `--validate-only` | Run pre-flight validation checks and exit |
 | `--datapackage-only` | Regenerate `datapackage.json` from existing outputs without rerunning histology or ephys preprocessing |
 | `--source-results PATH` | Existing results asset/root or mouse output directory to copy into `results_root` before `--datapackage-only` regeneration |
@@ -399,6 +400,14 @@ ephys extraction (delegated to
 converts this into IBL ALF format (e.g., `spikes.times.npy`,
 `spikes.clusters.npy`, `channels.localCoordinates.npy`, etc.).
 
+Optional conversion metrics are opt-in with `--extra-metrics` (or
+`PipelineConfig.extra_metrics`). `raw_activity` writes per-contact AP event
+rates, `_iblqc_channels.rawActivity.npy` with its sampled duration and
+metadata, into each ALF collection. The datapackage references the
+collection directory, so it does not change; the GUI shows the plots only
+when the files are present. The installed conversion package must provide
+the requested metric, which pre-flight validation checks.
+
 Ephys extraction runs once per unique recording ID (deduplicated across
 manifest rows).
 
@@ -435,6 +444,7 @@ results_root/
             |-- channels.rawInd.npy
             |-- channels.contactId.npy          # Optional; new ephys conversion outputs
             |-- channels.shankInd.npy
+            |-- _iblqc_channels.rawActivity*.npy  # Only with --extra-metrics raw_activity
             +-- band_corr/                    # Full matrices + row_channels.json
 ```
 

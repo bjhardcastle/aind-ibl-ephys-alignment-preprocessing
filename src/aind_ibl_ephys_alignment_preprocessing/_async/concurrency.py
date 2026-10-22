@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 from functools import partial
@@ -151,6 +151,7 @@ def _run_ephys_sync(
     data_root: Path,
     num_parallel_jobs: int = 4,
     coherence_block_source: str = "all",
+    extra_metrics: Sequence[str] = (),
 ) -> None:
     """Single recording ephys in a separate *process*.
 
@@ -159,9 +160,13 @@ def _run_ephys_sync(
     from aind_ephys_ibl_gui_conversion.ephys import extract_continuous, extract_spikes
 
     from aind_ibl_ephys_alignment_preprocessing.ephys import (
+        extra_metric_kwargs,
         find_session_dir,
         resolve_surface_finding,
     )
+
+    # Metric names cross the process boundary; configurations are built here.
+    metric_kwargs = extra_metric_kwargs(extra_metrics)
 
     sorted_rec = mr.sorted_recording
     recording_id = mr.recording_id
@@ -187,6 +192,7 @@ def _run_ephys_sync(
                 num_parallel_jobs=num_parallel_jobs,
                 session_folder=session_folder,
                 coherence_block_source=coherence_block_source,
+                **metric_kwargs,
             )
         else:
             extract_continuous(
@@ -195,6 +201,7 @@ def _run_ephys_sync(
                 num_parallel_jobs=num_parallel_jobs,
                 session_folder=session_folder,
                 coherence_block_source=coherence_block_source,
+                **metric_kwargs,
             )
         extract_spikes(recording_folder, results_folder)
         done.write_text("ok")

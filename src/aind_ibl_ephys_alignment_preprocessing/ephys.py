@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
 import os
 import re
+from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
+from aind_ibl_ephys_alignment_preprocessing._constants import CONVERSION_METRICS
 from aind_ibl_ephys_alignment_preprocessing.types import ManifestRow, OutputDirs
 
 logger = logging.getLogger(__name__)
@@ -434,6 +438,53 @@ def has_sorting_output(recording_folder: Path | None, ephys_collection: str) -> 
     return any(p.is_dir() and analyzer_collection(p.name) == wanted for p in postprocessed.iterdir())
 
 
+def build_extra_metrics(names: Sequence[str]) -> tuple[Any, ...]:
+    """Configure the requested conversion metric extensions.
+
+    Parameters
+    ----------
+    names : Sequence[str]
+        Keys of :data:`~aind_ibl_ephys_alignment_preprocessing._constants.CONVERSION_METRICS`, in the order to run them.
+
+    Returns
+    -------
+    tuple
+        Metric configurations for ``extract_continuous(extra_metrics=...)``.
+
+    Raises
+    ------
+    ValueError
+        If a name is unknown or repeated.
+    RuntimeError
+        If the installed conversion package does not provide the metric.
+    """
+    if len(set(names)) != len(names):
+        raise ValueError(f"Duplicate conversion metrics requested: {list(names)}")
+    metrics = []
+    for name in names:
+        if name not in CONVERSION_METRICS:
+            raise ValueError(f"Unknown conversion metric {name!r}; choose from {sorted(CONVERSION_METRICS)}")
+        module_name, factory = CONVERSION_METRICS[name]
+        try:
+            module = importlib.import_module(module_name)
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                f"Conversion metric {name!r} requires {module_name}, which the installed "
+                "aind-ephys-ibl-gui-conversion does not provide"
+            ) from exc
+        metrics.append(getattr(module, factory)())
+    return tuple(metrics)
+
+
+def extra_metric_kwargs(names: Sequence[str]) -> dict[str, Any]:
+    """Return ``extract_continuous`` keyword arguments for requested metrics.
+
+    Empty when nothing is requested, so conversion releases that predate
+    ``extra_metrics`` are still called with their original signature.
+    """
+    return {"extra_metrics": build_extra_metrics(names)} if names else {}
+
+
 def run_ephys_for_recording(
     row: ManifestRow,
     outputs: OutputDirs,
@@ -441,6 +492,7 @@ def run_ephys_for_recording(
     processed: set[str],
     num_parallel_jobs: int = 4,
     coherence_block_source: str = "all",
+    extra_metrics: Sequence[str] = (),
 ) -> None:
     """Run ephys extraction once per unique ``sorted_recording``.
 
@@ -461,10 +513,15 @@ def run_ephys_for_recording(
         Number of parallel workers for ``compute_rms`` in ``extract_continuous``.
     coherence_block_source : {"all", "main", "surface"}
         Blocks contributing to correlation and coherency.
+    extra_metrics : Sequence[str]
+        Optional conversion metrics to compute; see :func:`build_extra_metrics`.
     """
     # Imported lazily so lightweight consumers (e.g. pre-flight validation)
     # can use ``has_sorting_output`` without pulling in spikeinterface.
     from aind_ephys_ibl_gui_conversion.ephys import extract_continuous, extract_spikes
+
+    # Resolve before any extraction so a missing metric fails the run up front.
+    metric_kwargs = extra_metric_kwargs(extra_metrics)
 
     sorted_rec = str(row.sorted_recording)
     if sorted_rec in processed:
@@ -492,6 +549,7 @@ def run_ephys_for_recording(
             num_parallel_jobs=num_parallel_jobs,
             session_folder=session_folder,
             coherence_block_source=coherence_block_source,
+            **metric_kwargs,
         )
     else:
         extract_continuous(
@@ -500,6 +558,7 @@ def run_ephys_for_recording(
             num_parallel_jobs=num_parallel_jobs,
             session_folder=session_folder,
             coherence_block_source=coherence_block_source,
+            **metric_kwargs,
         )
 
     extract_spikes(recording_folder, results_folder, session_folder=session_folder)
@@ -514,6 +573,7 @@ def run_ephys_for_stream(
     data_root: Path,
     num_parallel_jobs: int = 4,
     coherence_block_source: str = "all",
+    extra_metrics: Sequence[str] = (),
 ) -> None:
     """Run ephys extraction for a single ``(recording, ephys_collection)`` slice.
 
@@ -556,10 +616,15 @@ def run_ephys_for_stream(
         Number of parallel workers for ``compute_rms`` in ``extract_continuous``.
     coherence_block_source : {"all", "main", "surface"}
         Blocks contributing to correlation and coherency.
+    extra_metrics : Sequence[str]
+        Optional conversion metrics to compute; see :func:`build_extra_metrics`.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     from aind_ephys_ibl_gui_conversion.ephys import extract_continuous, extract_spikes
+
+    # Resolve before any extraction so a missing metric fails the run up front.
+    metric_kwargs = extra_metric_kwargs(extra_metrics)
 
     mouse_root = outputs.tracks_root.parent
     results_folder = mouse_root / recording_id
@@ -593,6 +658,7 @@ def run_ephys_for_stream(
                 num_parallel_jobs=num_parallel_jobs,
                 session_folder=session_folder,
                 coherence_block_source=coherence_block_source,
+                **metric_kwargs,
             )
         else:
             extract_continuous(
@@ -602,6 +668,7 @@ def run_ephys_for_stream(
                 num_parallel_jobs=num_parallel_jobs,
                 session_folder=session_folder,
                 coherence_block_source=coherence_block_source,
+                **metric_kwargs,
             )
 
     def _spikes() -> None:

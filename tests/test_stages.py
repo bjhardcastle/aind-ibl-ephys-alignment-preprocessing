@@ -599,6 +599,7 @@ def test_stage_ephys_namespaces_output_by_unit(tmp_path: Path, monkeypatch: pyte
         data_root=tmp_path / "data",
         num_parallel_jobs=1,
         coherence_block_source="surface",
+        extra_metrics=("raw_activity",),
     )
 
     calls = []
@@ -613,8 +614,9 @@ def test_stage_ephys_namespaces_output_by_unit(tmp_path: Path, monkeypatch: pyte
         *,
         num_parallel_jobs,
         coherence_block_source,
+        extra_metrics,
     ):
-        calls.append(coherence_block_source)
+        calls.append((coherence_block_source, extra_metrics))
         # Emulate a real per-probe ALF write into this unit's mouse tree.
         mouse_dir = out.tracks_root.parent
         _write(mouse_dir / "rec1" / str(collection) / "spikes.times.npy")
@@ -628,7 +630,7 @@ def test_stage_ephys_namespaces_output_by_unit(tmp_path: Path, monkeypatch: pyte
     top_level = {p.name for p in config.results_root.iterdir()}
     assert top_level == {"ecephys_791094_A__ProbeA", "ecephys_791094_A__ProbeB"}
     assert (config.results_root / "ecephys_791094_A__ProbeA" / "791094").is_dir()
-    assert calls == ["surface", "surface"]
+    assert calls == [("surface", ("raw_activity",))] * 2
 
     # ...and pack's layout-agnostic merge still unions both units into one tree.
     merged = merge_pipeline_outputs(config.results_root, tmp_path / "packed", "791094")

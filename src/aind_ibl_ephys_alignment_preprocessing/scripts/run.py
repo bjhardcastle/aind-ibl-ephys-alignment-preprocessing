@@ -46,12 +46,22 @@ def main() -> None:
             "round-trips through Code Ocean app-panel string parameters."
         ),
     )
+    parser.add_argument(
+        "--extra-metrics",
+        default="",
+        help=(
+            "Comma-separated optional conversion metrics to compute during ephys "
+            "extraction (e.g. 'raw_activity'). None by default. Takes a string so it "
+            "round-trips through Code Ocean app-panel string parameters."
+        ),
+    )
     args = parser.parse_args()
 
     if args.source_results is not None and not args.datapackage_only:
         parser.error("--source-results is only valid with --datapackage-only")
 
     emit_qc = str(args.qc).strip().lower() in {"1", "true", "yes", "y", "t", "on"}
+    extra_metrics = tuple(name.strip() for name in str(args.extra_metrics).split(",") if name.strip())
 
     from aind_ibl_ephys_alignment_preprocessing.types import PipelineConfig
 
@@ -63,6 +73,7 @@ def main() -> None:
         manifest_csv=Path(args.manifest),
         skip_ephys=args.skip_ephys,
         emit_qc=emit_qc,
+        extra_metrics=extra_metrics,
     )
 
     if args.validate_only:

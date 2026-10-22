@@ -16,3 +16,14 @@ resamples CCF volumes into image space. The forward warp is deliberately absent:
 only the QC channels->CCF warp needs it, and standalone registrations are not
 required to ship it.
 """
+
+CONVERSION_METRICS: dict[str, tuple[str, str]] = {
+    "raw_activity": ("aind_ephys_ibl_gui_conversion.activity", "raw_activity"),
+}
+"""Optional conversion metric extensions, keyed by pipeline-facing name.
+
+Each value names the ``aind_ephys_ibl_gui_conversion`` module and factory that
+configure the metric for ``extract_continuous(extra_metrics=...)``. Modules are
+imported only when a run requests the metric, so conversion releases without
+it still work for runs that do not.
+"""

@@ -179,6 +179,7 @@ def run_pipeline(config: PipelineConfig) -> list[ProcessResult]:
                 processed_recordings,
                 num_parallel_jobs=config.num_parallel_jobs,
                 coherence_block_source=config.coherence_block_source,
+                extra_metrics=config.extra_metrics,
             )
 
     manifest_rows = [ManifestRow.from_series(row) for _, row in manifest_df.iterrows()]

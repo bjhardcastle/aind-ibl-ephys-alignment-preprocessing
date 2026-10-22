@@ -174,6 +174,21 @@ class PipelineValidator:
 
         if self.config.skip_ephys:
             self._add_result(True, category, "skip_ephys", "Ephys processing will be skipped", severity="info")
+        elif self.config.extra_metrics:
+            from aind_ibl_ephys_alignment_preprocessing.ephys import build_extra_metrics
+
+            try:
+                build_extra_metrics(self.config.extra_metrics)
+            except (RuntimeError, ValueError) as exc:
+                self._add_result(False, category, "extra_metrics", str(exc))
+            else:
+                self._add_result(
+                    True,
+                    category,
+                    "extra_metrics",
+                    f"Conversion metrics available: {', '.join(self.config.extra_metrics)}",
+                    severity="info",
+                )
 
     # -- Category 2: Manifest CSV -----------------------------------------------
 

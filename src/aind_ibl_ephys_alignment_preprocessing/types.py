@@ -10,9 +10,9 @@ from typing import Any, Literal
 
 import ants
 import pandas as pd
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
-from aind_ibl_ephys_alignment_preprocessing._constants import REGISTRATION_TRANSFORMS
+from aind_ibl_ephys_alignment_preprocessing._constants import CONVERSION_METRICS, REGISTRATION_TRANSFORMS
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,10 @@ class PipelineConfig(BaseModel, frozen=True):
         If *True*, skip ephys extraction.
     coherence_block_source : {"all", "main", "surface"}
         Recording block provenance used for correlation and coherency.
+    extra_metrics : tuple[str, ...]
+        Optional conversion metrics to compute during ephys extraction, e.g.
+        ``("raw_activity",)``. Names are validated against
+        :data:`~aind_ibl_ephys_alignment_preprocessing._constants.CONVERSION_METRICS`.
     desired_voxel_size_um : float
         Target voxel size in micrometers for multiscale level selection.
     """
@@ -120,6 +124,10 @@ class PipelineConfig(BaseModel, frozen=True):
     output_voxel_size_um: float = 30.0
     num_parallel_jobs: int = 4
     coherence_block_source: Literal["all", "main", "surface"] = "all"
+    # Optional conversion metric extensions (e.g. "raw_activity"). Off by
+    # default: each adds CPU time to every conversion, and their outputs are
+    # extra ALF files in the collection that the GUI shows only when present.
+    extra_metrics: tuple[str, ...] = ()
     # QC/diagnostic outputs that the alignment GUI never reads: the Slicer FCSVs
     # (spim/template/ccf), the CCF/bregma xyz_picks, and the CCF-space histology
     # volumes. Off by default — producing them costs the ANTs point-warps and the
@@ -131,6 +139,17 @@ class PipelineConfig(BaseModel, frozen=True):
     # see ``coverage.py`` for the session that was lost this way. Mirrors the
     # trigger capsule's ``--allow-partial`` so both layers enforce one policy.
     allow_partial: bool = False
+
+    @field_validator("extra_metrics")
+    @classmethod
+    def _known_extra_metrics(cls, names: tuple[str, ...]) -> tuple[str, ...]:
+        """Reject unknown or repeated conversion metric names at config time."""
+        unknown = sorted(set(names) - set(CONVERSION_METRICS))
+        if unknown:
+            raise ValueError(f"Unknown conversion metrics {unknown}; choose from {sorted(CONVERSION_METRICS)}")
+        if len(set(names)) != len(names):
+            raise ValueError(f"Duplicate conversion metrics: {list(names)}")
+        return names
 
     @model_validator(mode="after")
     def _resolve_relative_paths(self) -> PipelineConfig:
